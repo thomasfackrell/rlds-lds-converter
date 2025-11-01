@@ -1,4 +1,4 @@
-# LDS / RLDS Scripture Comparison Tool
+# RLDS / LDS Scripture Comparison Tool
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://rlds-lds-converter.streamlit.app/)
 
@@ -23,7 +23,7 @@ To run this app on your local machine:
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/thomasfackrell/rlds-lds-converter.git](https://github.com/thomasfackrell/rlds-lds-converter.git)
+    git clone https://github.com/thomasfackrell/rlds-lds-converter.git
     cd rlds-lds-converter
     ```
 
@@ -50,7 +50,10 @@ To run this app on your local machine:
     Your browser should automatically open to the app.
 
 ## 📁 Project Structure
+```
+rlds-lds-converter/
 ├── app.py           # The main Streamlit application
 ├── requirements.txt # Python dependencies (just streamlit)
 ├── scripture.db     # The complete SQLite database
 └── README.md
+```
