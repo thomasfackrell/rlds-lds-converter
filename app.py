@@ -377,6 +377,28 @@ def get_chapter_boundaries(_conn, chapter_id):
 
 # --- Main Streamlit App UI ---
 
+# 1. Initialize the session state variable
+if 'show_alert' not in st.session_state:
+    st.session_state.show_alert = True
+
+# 2. Callback function to update the state
+def dismiss_alert():
+    st.session_state.show_alert = False
+
+# 3. Check the state. If True, display the alert.
+if st.session_state.show_alert:
+    # Use columns to place the button neatly
+    col1, col2 = st.columns([0.85, 0.15]) 
+    with col1:
+        st.info("🔄 **For the best experience on mobile,** please rotate your device to landscape mode.", icon="ℹ️")
+    with col2:
+        # Pass the callback to the button's on_click
+        st.button("Dismiss", on_click=dismiss_alert, key="dismiss_alert_btn", use_container_width=True)
+
+# --- END OF ALERT ---
+# --- END OF ROTATION ALERT ---
+
+# ... rest of your app code ...
 st.set_page_config(page_title="RLDS/LDS Converter", page_icon="📖", layout="centered")
 st.title("📖 RLDS / LDS Scripture Converter")
 st.write("Convert scripture references between LDS and RLDS (Restorationist) canons.")
