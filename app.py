@@ -450,7 +450,7 @@ with tab1:
                             col_a, col_b = st.columns(2)
                             with col_a:
                                 st.subheader(f"{source_corpus_name}: {ref_input}")
-                                st.markdown(f"**{verse}** {source_text}", unsafe_allow_html=True)
+                                st.markdown(f"**{verse}** {source_text.replace('\\n', '<br>')}", unsafe_allow_html=True)
                             with col_b:
                                 st.subheader(f"{target_corpus_name}: (No Cross-Reference)")
                         else:
@@ -466,11 +466,11 @@ with tab1:
                                 col_a, col_b = st.columns(2)
                                 with col_a:
                                     st.subheader(f"{source_corpus_name}: {ref_input}")
-                                    st.markdown(f"**{verse}** {source_text}", unsafe_allow_html=True)
+                                    st.markdown(f"**{verse}** {source_text.replace('\\n', '<br>')}", unsafe_allow_html=True) # <-- FIX
                                 with col_b:
                                     st.subheader(f"{target_corpus_name}: {target_ref}")
                                     target_verse_num = target_ref.split(":")[-1]
-                                    st.markdown(f"**{target_verse_num}** {target_text}", unsafe_allow_html=True)
+                                    st.markdown(f"**{target_verse_num}** {target_text.replace('\\n', '<br>')}", unsafe_allow_html=True)
             
             else:
                 # --- 2. HANDLE CHAPTER CONVERSION ---
@@ -501,7 +501,7 @@ with tab1:
                         with col_a:
                             st.subheader(f"{source_corpus_name}: {book} {chapter}")
                             for verse in source_verses:
-                                st.markdown(f"**{verse['verse_number']}** {verse['text']}", unsafe_allow_html=True)
+                                st.markdown(f"**{verse['verse_number']}** {verse['text'].replace('\\n', '<br>')}", unsafe_allow_html=True)
 
                         # Display Target Column (Conditional)
                         with col_b:
@@ -527,7 +527,7 @@ with tab1:
                                             st.markdown(f"### {current_target_book_chap}")
                                             last_target_book_chap = current_target_book_chap
                                         
-                                        st.markdown(f"**{verse['verse_number']}** {verse['text']}", unsafe_allow_html=True)
+                                        st.markdown(f"**{verse['verse_number']}** {verse['text'].replace('\\n', '<br>')}", unsafe_allow_html=True)
                         
                         # We need a divider *after* the success messages and *before* the columns
                         st.divider()
@@ -609,7 +609,7 @@ with tab2:
                 st.warning("No text found for this chapter.")
             else:
                 for verse in source_verses:
-                    st.markdown(f"**{verse['verse_number']}** {verse['text']}", unsafe_allow_html=True)
+                    st.markdown(f"**{verse['verse_number']}** {verse['text'].replace('\\n', '<br>')}", unsafe_allow_html=True)
 
         # 2. Get and display target contiguous block (Right Column)
         with read_col_nav_2:
@@ -650,7 +650,7 @@ with tab2:
                                 st.markdown(f"### {current_target_book_chap}")
                                 last_target_book_chap = current_target_book_chap
                             
-                            st.markdown(f"**{verse['verse_number']}** {verse['text']}", unsafe_allow_html=True)
+                            st.markdown(f"**{verse['verse_number']}** {verse['text'].replace('\\n', '<br>')}", unsafe_allow_html=True)
 
 
 with tab3:
