@@ -390,7 +390,7 @@ if st.session_state.show_alert:
     # Use columns to place the button neatly
     col1, col2 = st.columns([0.85, 0.15]) 
     with col1:
-        st.info("🔄 **For the best experience on mobile,** please rotate your device to landscape mode.", icon="ℹ️")
+        st.info("**For the best experience on mobile,** please zoom out, and use a browser other than Safari.", icon="ℹ️")
     with col2:
         # Pass the callback to the button's on_click
         st.button("Dismiss", on_click=dismiss_alert, key="dismiss_alert_btn", use_container_width=True)
