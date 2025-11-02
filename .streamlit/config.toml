@@ -1,0 +1,22 @@
+# .streamlit/config.toml
+
+# This removes the hamburger menu and footer
+[ui]
+hideTopBar = false
+hideBottomBar = true
+
+
+[browser]
+# This sets the app to wide mode by default
+layout = "wide"
+
+[theme]
+# A clean, custom "book" theme
+base = "light"
+
+# Colors
+primaryColor = "#1E4D2B" # A dark, scripture-like green
+backgroundColor = "#FAF9F6" # Off-white / "parchment"
+secondaryBackgroundColor = "#F0F2F6" # Light gray for widgets and sidebar
+textColor = "#31333F"
+font = "sans serif"

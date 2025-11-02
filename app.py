@@ -4,6 +4,14 @@ import sqlite3
 
 import streamlit as st
 
+from utils import (
+    find_chapter_start_end_ids,
+    find_source_verse_id,
+    format_ref_range,
+    get_full_book_name,
+    get_reference_components,
+)
+
 # --- Database Setup ---
 
 DB_FILE = "scriptures.db"
@@ -73,7 +81,8 @@ def get_full_book_comparison(_conn, source_corpus_id, book_title):
         b_target.title AS target_book,
         c_target.chapter_number AS target_chapter,
         v_target.verse_number AS target_verse,
-        v_target.text AS target_text
+        v_target.text AS target_text,
+        v_target.id AS target_verse_id
     FROM verse AS v_source
     JOIN chapter AS c_source ON v_source.chapter_id = c_source.id
     JOIN book AS b_source ON c_source.book_id = b_source.id
@@ -156,7 +165,8 @@ def get_chapter_comparison_data(_conn, source_chapter_id):
         b_target.title AS target_book,
         c_target.chapter_number AS target_chapter,
         v_target.verse_number AS target_verse,
-        v_target.text AS target_text
+        v_target.text AS target_text,
+        v_target.id AS target_verse_id
     FROM verse AS v_source
     LEFT JOIN cross_reference AS cr ON v_source.id = cr.verse_id
     LEFT JOIN verse AS v_target ON cr.cross_ref_verse_id = v_target.id
@@ -178,32 +188,13 @@ def get_chapter_comparison_data(_conn, source_chapter_id):
 # --- Data Functions for Tab 1 (Verse Converter) ---
 
 def parse_reference(ref_string):
-    """Parses a scripture reference string into (book, chapter, verse)."""
+    """Parses 'Book C:V' format."""
     match = re.match(r'^(.*?)\s*(\d+):(\d+.*)$', ref_string.strip())
     if match:
         book, chapter, verse = match.groups()
+        book = get_full_book_name(book)
         return book.strip(), chapter.strip(), verse.strip()
     return None
-
-def find_source_verse_id(conn, book, chapter, verse, corpus_id):
-    """Finds the verse_id from the source corpus."""
-    query = """
-    SELECT v.id
-    FROM verse v
-    JOIN chapter c ON v.chapter_id = c.id
-    JOIN book b ON c.book_id = b.id
-    JOIN volume vol ON b.volume_id = vol.id
-    WHERE (b.title = ? OR b.short_title = ?)
-      AND c.chapter_number = ?
-      AND v.verse_number = ?
-      AND vol.corpus_id = ?
-    """
-    try:
-        cursor = conn.cursor()
-        cursor.execute(query, (book, book, chapter, verse, corpus_id))
-        result = cursor.fetchone()
-        return result['id'] if result else None
-    except sqlite3.Error: return None
 
 def find_target_verse_id(conn, source_verse_id):
     """Finds the corresponding target verse_id."""
@@ -234,10 +225,167 @@ def get_reference_from_id(conn, target_verse_id, target_corpus_id):
         return None
     except sqlite3.Error: return None
 
+
+# --- Helper Functions for Quick Jump (Tab 3) ---
+
+def parse_chapter_reference(ref_string):
+    """Parses 'Book C' format (e.g., 'Genesis 1', '1 Nephi 3')."""
+    match = re.match(r'^(.*?)\s*(\d+)$', ref_string.strip())
+    if match:
+        book, chapter = match.groups()
+        book = get_full_book_name(book)
+        return book.strip(), chapter.strip()
+    return None
+
+def get_nav_state_from_ref(conn, book, chapter, corpus_id):
+    """
+    Given a book, chapter, and corpus, finds the correct
+    Volume Title, Book Title, and Chapter Number for the dropdowns.
+    """
+    query = """
+    SELECT
+        vol.title AS volume_title,
+        b.title AS book_title,
+        c.chapter_number
+    FROM chapter c
+    JOIN book b ON c.book_id = b.id
+    JOIN volume vol ON b.volume_id = vol.id
+    WHERE (UPPER(b.title) = UPPER(?) OR UPPER(b.short_title) = UPPER(?))
+      AND c.chapter_number = ?
+      AND vol.corpus_id = ?
+    """
+    try:
+        cursor = conn.cursor()
+        # Pass book twice, once for title, once for short_title
+        cursor.execute(query, (book, book, chapter, corpus_id))
+        result = cursor.fetchone()
+        return result # Returns a dict-like Row
+    except sqlite3.Error:
+        return None
+
+def jump_to_chapter():
+    """
+    Callback function for the Quick Jump button.
+    Parses input and sets session_state for the dropdowns.
+    """
+    corpus_name = st.session_state.jump_corpus
+    corpus_id = corpus_ids[corpus_name]
+    ref_string = st.session_state.jump_input
+    
+    parsed = parse_chapter_reference(ref_string)
+    if not parsed:
+        st.toast(f"Invalid format. Use 'Book Chapter' (e.g., Genesis 1)", icon="❌")
+        return
+    
+    book, chapter = parsed
+    nav_state = get_nav_state_from_ref(conn, book, chapter, corpus_id)
+    
+    if not nav_state:
+        st.toast(f"Could not find {book} {chapter} in {corpus_name} corpus.", icon="❌")
+        return
+
+    # Set the session state keys for the selectboxes
+    st.session_state.nav_corpus = corpus_name
+    st.session_state.nav_vol = nav_state['volume_title']
+    st.session_state.nav_book = nav_state['book_title']
+    st.session_state.nav_chap = str(nav_state['chapter_number'])
+    
+    # Clear the text input
+    st.session_state.jump_input = ""
+
+
+def swap_corpora():
+    """Swaps the source and target corpora in session state."""
+    # Simple swap
+    old_source = st.session_state.source
+    st.session_state.source = st.session_state.target
+    st.session_state.target = old_source
+
+@st.cache_data
+def get_chapter_verses(_conn, chapter_id):
+    """Fetches all verses (as dicts) for a single chapter_id."""
+    conn = get_connection(DB_FILE)
+    if conn is None: return []
+    query = "SELECT verse_number, text FROM verse WHERE chapter_id = ? ORDER BY id"
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, (chapter_id,))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except sqlite3.Error:
+        return []
+
+@st.cache_data
+def get_contiguous_verses(_conn, start_verse_id, end_verse_id):
+    """
+    Fetches all verse rows (as dicts) between two verse IDs, inclusive,
+    joining to get chapter/book info for display headers.
+    """
+    conn = get_connection(DB_FILE)
+    if conn is None: return []
+    
+    # Ensure start and end are in the correct order
+    if start_verse_id > end_verse_id:
+        start_verse_id, end_verse_id = end_verse_id, start_verse_id
+    
+    query = """
+    SELECT
+        v.verse_number, v.text,
+        c.chapter_number,
+        b.title AS book_title
+    FROM verse v
+    JOIN chapter c ON v.chapter_id = c.id
+    JOIN book b ON c.book_id = b.id
+    WHERE v.id >= ? AND v.id <= ?
+    ORDER BY v.id;
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, (start_verse_id, end_verse_id))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        st.error(f"Database error getting contiguous verses: {e}")
+        return []
+
+def get_verse_text_from_id(conn, verse_id):
+    """Fetches the text of a single verse by its ID."""
+    query = "SELECT text FROM verse WHERE id = ?"
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, (verse_id,))
+        result = cursor.fetchone()
+        return result['text'] if result else None
+    except sqlite3.Error:
+        return None
+
+@st.cache_data
+def get_chapter_boundaries(_conn, chapter_id):
+    """Finds the first and last verse.id for a given chapter_id."""
+    conn = get_connection(DB_FILE)
+    if conn is None: return None, None
+    query = "SELECT MIN(id) AS first_id, MAX(id) AS last_id FROM verse WHERE chapter_id = ?"
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, (chapter_id,))
+        result = cursor.fetchone()
+        if result and result['first_id'] and result['last_id']:
+            return result['first_id'], result['last_id']
+        return None, None
+    except sqlite3.Error:
+        return None, None
+
 # --- Main Streamlit App UI ---
 
-st.set_page_config(page_title="Scripture Tool", layout="wide")
-st.title("✝️ LDS / RLDS Scripture Comparison Tool")
+st.set_page_config(page_title="RLDS/LDS Converter", page_icon="📖", layout="centered")
+st.title("📖 RLDS / LDS Scripture Converter")
+st.write("Convert scripture references between LDS and RLDS (Restorationist) canons.")
+
+# --- Initialize session state for the converter ---
+if 'source' not in st.session_state:
+    st.session_state.source = 'LDS'
+if 'target' not in st.session_state:
+    st.session_state.target = 'RLDS'
 
 # --- Global Setup (DB Connection and Corpus IDs) ---
 if not os.path.exists(DB_FILE):
@@ -248,116 +396,166 @@ if conn is None: st.stop()
 corpus_ids = get_corpus_ids(conn)
 if corpus_ids is None: st.stop()
 
-# --- Tabbed Interface ---
-tab1, tab2, tab3, tab4 = st.tabs(["Verse Converter", "Full Book Comparator", "Chapter Explorer", "Useful Links"])
+# --- Tabbed Interface (REMOVED TAB 4) ---
+tab1, tab2, tab3 = st.tabs(["Converter", "Chapter Explorer", "More Resources"])
 
 # --- TAB 1: Verse Converter ---
 with tab1:
-    st.header("Single Verse Converter")
-    st.write("Convert a single scripture reference between LDS and RLDS (Community of Christ) canons.")
+    st.header("Chapter/Verse Converter")
+    st.write("Convert a single verse (e.g., 1 Nephi 1:1) or a full chapter (e.g., Gen 1).")
     
+    # --- "Google Translate" UI (OUTSIDE THE FORM) ---
+    col1, col2, col3 = st.columns([0.4, 0.2, 0.4], gap="small", vertical_alignment="center")
+    
+    with col1:
+        st.markdown(f"<h3 style='text-align: right; font-weight: 400;'>From: {st.session_state.source}</h3>", unsafe_allow_html=True)
+    with col2:
+        st.button("⇆", on_click=swap_corpora, use_container_width=True, help="Swap corpora")
+    with col3:
+        st.markdown(f"<h3 style='text-align: left; font-weight: 400;'>To: {st.session_state.target}</h3>", unsafe_allow_html=True)
+    
+    # --- THE FORM ---
     with st.form(key="converter_form"):
-        ref_input = st.text_input("Enter scripture reference", placeholder="e.g., 1 Nephi 3:7 or Genesis 1:1")
-        source_corpus_name = st.radio("Select the source:", ('LDS', 'RLDS'), horizontal=True)
-        submit_button = st.form_submit_button(label="Convert")
+        ref_input = st.text_input("Enter reference", placeholder="e.g., 1 Nephi 3:7 or Gen 1", label_visibility="collapsed")
+        submit_button = st.form_submit_button(label="Convert", use_container_width=True)
 
+    # --- NEW LOGIC ---
     if submit_button and ref_input:
         with st.spinner("Looking up reference..."):
-            parsed_ref = parse_reference(ref_input)
-            if not parsed_ref:
-                st.error("Invalid format. Please use 'Book Chapter:Verse' (e.g., Genesis 1:1).")
-            else:
-                book, chapter, verse = parsed_ref
-                target_corpus_name = 'RLDS' if source_corpus_name == 'LDS' else 'LDS'
-                source_corpus_id = corpus_ids[source_corpus_name]
-                target_corpus_id = corpus_ids[target_corpus_name]
-
-                source_id = find_source_verse_id(conn, book, chapter, verse, source_corpus_id)
-                if not source_id:
-                    st.warning(f"Could not find **{ref_input}** in the **{source_corpus_name}** canon.")
+            source_corpus_name = st.session_state.source
+            target_corpus_name = st.session_state.target
+            source_corpus_id = corpus_ids[source_corpus_name]
+            target_corpus_id = corpus_ids[target_corpus_name]
+            
+            # --- BRANCH: Is it a verse or a chapter? ---
+            if ":" in ref_input:
+                # --- 1. HANDLE VERSE CONVERSION ---
+                parsed_ref = parse_reference(ref_input)
+                if not parsed_ref:
+                    st.error("Invalid format. Please use 'Book Chapter:Verse' (e.g., Genesis 1:1).")
                 else:
-                    target_id = find_target_verse_id(conn, source_id)
-                    if not target_id:
-                        st.info(f"**{ref_input}** was found, but no cross-reference exists.")
+                    book, chapter, verse = parsed_ref
+                    ref_input = f"{book} {chapter}:{verse}"
+                    source_id, source_text = find_source_verse_id(conn, book, chapter, verse, source_corpus_id)
+                    
+                    if not source_id:
+                        st.warning(f"Could not find **{book} {chapter}:{verse}** in the **{source_corpus_name}** canon.")
                     else:
-                        target_ref = get_reference_from_id(conn, target_id, target_corpus_id)
-                        if not target_ref:
-                            st.error("Found a cross-reference, but could not reconstruct the target reference.")
+                        target_id = find_target_verse_id(conn, source_id)
+                        
+                        if not target_id:
+                            st.info(f"**{ref_input}** was found, but no cross-reference exists.")
+                            st.divider()
+                            # Show text in columns (Source only)
+                            col_a, col_b = st.columns(2)
+                            with col_a:
+                                st.subheader(f"{source_corpus_name}: {ref_input}")
+                                st.markdown(f"**{verse}** {source_text}", unsafe_allow_html=True)
+                            with col_b:
+                                st.subheader(f"{target_corpus_name}: (No Cross-Reference)")
                         else:
-                            st.success(f"**{source_corpus_name}**: {ref_input}")
-                            st.success(f"**{target_corpus_name}**: {target_ref}")
+                            target_ref = get_reference_from_id(conn, target_id, target_corpus_id)
+                            target_text = get_verse_text_from_id(conn, target_id)
+                            
+                            if not target_ref or target_text is None:
+                                st.error("Found a cross-reference, but could not reconstruct the target reference or text.")
+                            else:
+                                st.divider()
+                                
+                                # Show text in columns
+                                col_a, col_b = st.columns(2)
+                                with col_a:
+                                    st.subheader(f"{source_corpus_name}: {ref_input}")
+                                    st.markdown(f"**{verse}** {source_text}", unsafe_allow_html=True)
+                                with col_b:
+                                    st.subheader(f"{target_corpus_name}: {target_ref}")
+                                    target_verse_num = target_ref.split(":")[-1]
+                                    st.markdown(f"**{target_verse_num}** {target_text}", unsafe_allow_html=True)
+            
+            else:
+                # --- 2. HANDLE CHAPTER CONVERSION ---
+                parsed_ref = parse_chapter_reference(ref_input)
+                if not parsed_ref:
+                    st.error("Invalid format. Use 'Book Chapter' (e.g., Genesis 1). No colon was found.")
+                else:
+                    book, chapter = parsed_ref
+                    ref_input = f"{book} {chapter}"
+                    
+                    source_chapter_id, source_first_verse_id, source_last_verse_id = find_chapter_start_end_ids(conn, book, chapter, source_corpus_id)
+
+                    
+                    if not source_chapter_id:
+                        st.warning(f"Could not find **{book} {chapter}** in the **{source_corpus_name}** canon.")
+                    else:
+                        # --- SOURCE WAS FOUND ---
+                        # Get source verses immediately
+                        source_verses = get_chapter_verses(conn, source_chapter_id)
+                        
+                        # Now, check for target
+                        target_first_verse_id = find_target_verse_id(conn, source_first_verse_id)
+                        target_last_verse_id = find_target_verse_id(conn, source_last_verse_id)
+                        
+                        col_a, col_b = st.columns(2)
+
+                        # Display Source Column (Always)
+                        with col_a:
+                            st.subheader(f"{source_corpus_name}: {book} {chapter}")
+                            for verse in source_verses:
+                                st.markdown(f"**{verse['verse_number']}** {verse['text']}", unsafe_allow_html=True)
+
+                        # Display Target Column (Conditional)
+                        with col_b:
+                            if not target_first_verse_id or not target_last_verse_id:
+                                st.subheader(f"{target_corpus_name}: (No Cross-Reference)")
+                            else:
+                                start_comps = get_reference_components(conn, target_first_verse_id, target_corpus_id)
+                                end_comps = get_reference_components(conn, target_last_verse_id, target_corpus_id)
+                                
+                                if not start_comps or not end_comps:
+                                    st.error("Found cross-references, but could not reconstruct the target references.")
+                                else:
+                                    target_ref_range = format_ref_range(start_comps, end_comps)
+                                    
+                                    
+                                    st.subheader(f"{target_corpus_name}: {target_ref_range}")
+                                    target_verses = get_contiguous_verses(conn, target_first_verse_id, target_last_verse_id)
+                                    
+                                    last_target_book_chap = None
+                                    for verse in target_verses:
+                                        current_target_book_chap = f"{verse['book_title']} {verse['chapter_number']}"
+                                        if current_target_book_chap != last_target_book_chap:
+                                            st.markdown(f"### {current_target_book_chap}")
+                                            last_target_book_chap = current_target_book_chap
+                                        
+                                        st.markdown(f"**{verse['verse_number']}** {verse['text']}", unsafe_allow_html=True)
+                        
+                        # We need a divider *after* the success messages and *before* the columns
+                        st.divider()
+                      
+
     elif submit_button:
         st.warning("Please enter a scripture reference.")
 
-# --- TAB 2: Full Book Comparator ---
+
+# --- TAB 2: Chapter Explorer ---
 with tab2:
-    st.header("Full Book Comparator")
-    st.write("See a side-by-side comparison of an entire book.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        source_corpus_select_book = st.selectbox("Select Source Corpus", ('LDS', 'RLDS'), key="book_source_corpus")
-    source_corpus_id_book = corpus_ids[source_corpus_select_book]
-    target_corpus_name_book = 'RLDS' if source_corpus_select_book == 'LDS' else 'LDS'
-    
-    books_list = get_books_for_corpus(conn, source_corpus_id_book)
-    with col2:
-        if not books_list:
-            st.warning(f"No books found for {source_corpus_select_book} corpus.")
-            selected_book = None
-        else:
-            selected_book = st.selectbox("Select Book", books_list, key="book_book")
-
-    if selected_book and st.button("Load Book Comparison", key="load_book"):
-        with st.spinner(f"Loading {selected_book}..."):
-            comparison_data = get_full_book_comparison(conn, source_corpus_id_book, selected_book)
-            if not comparison_data:
-                st.info(f"No data found for {selected_book}.")
-            else:
-                st.divider()
-                read_col1, read_col2 = st.columns(2)
-                with read_col1: st.subheader(f"{source_corpus_select_book}: {selected_book}")
-                with read_col2: st.subheader(f"{target_corpus_name_book} (Cross-References)")
-                
-                last_source_chapter = None
-                last_target_ref = None
-                
-                for row in comparison_data:
-                    with read_col1:
-                        if row['source_chapter'] != last_source_chapter:
-                            st.markdown(f"### Chapter {row['source_chapter']}")
-                            last_source_chapter = row['source_chapter']
-                        st.markdown(f"**{row['source_verse']}** {row['source_text']}", unsafe_allow_html=True)
-                    
-                    with read_col2:
-                        if row['target_book']:
-                            current_target_ref = f"{row['target_book']} {row['target_chapter']}"
-                            if current_target_ref != last_target_ref:
-                                if last_target_ref is not None:
-                                    st.markdown("---")
-                                st.markdown(f"### {current_target_ref}")
-                                last_target_ref = current_target_ref
-                            
-                            st.markdown(f"**{row['target_verse']}** {row['target_text']}", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"**{row['source_verse']}** - *No cross-reference*")
-
-# --- TAB 3: Chapter Explorer ---
-with tab3:
     st.header("Chapter Explorer & Side-by-Side Reader")
-    st.write("Navigate by corpus, volume, book, and chapter to read the text side-by-side with its counterpart.")
+    st.write("Navigate by corpus, volume, book, and chapter.")#, or use the 'Quick Jump' to go directly to a chapter.")
 
-    # --- Navigation Dropdowns ---
+    st.subheader("Browse")
     nav_cols = st.columns(4)
     with nav_cols[0]:
         corpus_select_nav = st.selectbox("Corpus", ('LDS', 'RLDS'), key="nav_corpus")
         corpus_id_nav = corpus_ids[corpus_select_nav]
         target_corpus_name_nav = 'RLDS' if corpus_select_nav == 'LDS' else 'LDS'
+        # Get target_corpus_id, we'll need it for the helpers
+        target_corpus_id_nav = corpus_ids[target_corpus_name_nav]
+
 
     with nav_cols[1]:
         volumes_list = get_volumes_for_corpus(conn, corpus_id_nav)
         if not volumes_list:
-            st.warning("No volumes found for this corpus.")
+            st.warning("No volumes found.")
             selected_volume_id = None
         else:
             volume_dict = {vol['title']: vol['id'] for vol in volumes_list}
@@ -372,7 +570,7 @@ with tab3:
         else:
             books_list_nav = get_books_for_volume(conn, selected_volume_id)
             if not books_list_nav:
-                st.warning("No books found for this volume.")
+                st.warning("No books found.")
                 selected_book_id = None
                 selected_book_title = None
             else:
@@ -388,7 +586,7 @@ with tab3:
         else:
             chapters_list = get_chapters_for_book(conn, selected_book_id)
             if not chapters_list:
-                st.warning("No chapters found for this book.")
+                st.warning("No chapters found.")
                 selected_chapter_id = None
                 selected_chapter_num = None
             else:
@@ -398,39 +596,69 @@ with tab3:
 
     st.divider()
 
-    # --- Display Chapter Text ---
+    # --- Display Chapter Text (NEW LOGIC) ---
     if selected_chapter_id and selected_book_title and selected_chapter_num:
-        chapter_data = get_chapter_comparison_data(conn, selected_chapter_id)
         
         read_col_nav_1, read_col_nav_2 = st.columns(2)
         
+        # 1. Get and display source chapter text (Left Column)
         with read_col_nav_1:
             st.subheader(f"{corpus_select_nav}: {selected_book_title} {selected_chapter_num}")
-            for row in chapter_data:
-                st.markdown(f"**{row['source_verse']}** {row['source_text']}", unsafe_allow_html=True)
+            source_verses = get_chapter_verses(conn, selected_chapter_id)
+            if not source_verses:
+                st.warning("No text found for this chapter.")
+            else:
+                for verse in source_verses:
+                    st.markdown(f"**{verse['verse_number']}** {verse['text']}", unsafe_allow_html=True)
 
+        # 2. Get and display target contiguous block (Right Column)
         with read_col_nav_2:
-            st.subheader(f"{target_corpus_name_nav} (Cross-References)")
-            last_target_ref_nav = None
-            for row in chapter_data:
-                if row['target_book']:
-                    current_target_ref_nav = f"{row['target_book']} {row['target_chapter']}"
-                    if current_target_ref_nav != last_target_ref_nav:
-                        if last_target_ref_nav is not None:
-                            st.markdown("---")
-                        st.markdown(f"### {current_target_ref_nav}")
-                        last_target_ref_nav = current_target_ref_nav
-                    st.markdown(f"**{row['target_verse']}** {row['target_text']}", unsafe_allow_html=True)
+            # Find boundaries of the source chapter
+            source_first_verse_id, source_last_verse_id = get_chapter_boundaries(conn, selected_chapter_id)
+            
+            if not source_first_verse_id:
+                st.subheader(f"{target_corpus_name_nav} (Cross-References)")
+                st.info("Source chapter is empty or not found.")
+            else:
+                # Find target IDs for the first and last verse
+                target_first_verse_id = find_target_verse_id(conn, source_first_verse_id)
+                target_last_verse_id = find_target_verse_id(conn, source_last_verse_id)
+                
+                if not target_first_verse_id or not target_last_verse_id:
+                    st.subheader(f"{target_corpus_name_nav} (Cross-References)")
+                    st.info("A complete cross-reference (start and end) was not found for this chapter.")
                 else:
-                    st.markdown(f"**{row['source_verse']}** - *No cross-reference*")
+                    # We have a valid range. Get components to build the header.
+                    start_comps = get_reference_components(conn, target_first_verse_id, target_corpus_id_nav)
+                    end_comps = get_reference_components(conn, target_last_verse_id, target_corpus_id_nav)
+                    
+                    if not start_comps or not end_comps:
+                        st.subheader(f"{target_corpus_name_nav} (Cross-References)")
+                        st.error("Found cross-references, but could not reconstruct the target references.")
+                    else:
+                        # Format the range and set the subheader
+                        target_ref_range = format_ref_range(start_comps, end_comps)
+                        st.subheader(f"{target_corpus_name_nav}: {target_ref_range}")
+                        
+                        # Get the contiguous block of verses
+                        target_verses = get_contiguous_verses(conn, target_first_verse_id, target_last_verse_id)
+                        
+                        last_target_book_chap = None
+                        for verse in target_verses:
+                            current_target_book_chap = f"{verse['book_title']} {verse['chapter_number']}"
+                            if current_target_book_chap != last_target_book_chap:
+                                st.markdown(f"### {current_target_book_chap}")
+                                last_target_book_chap = current_target_book_chap
+                            
+                            st.markdown(f"**{verse['verse_number']}** {verse['text']}", unsafe_allow_html=True)
 
-# --- TAB 4: Useful Links ---
-with tab4:
-    st.header("Useful Links")
+
+with tab3:
+    st.header("More Study Resources")
 
     st.subheader("Scripture Study Tools")
     st.markdown("""
-    * [**Joseph Smith's Inspired Version (JST) Inline Viewer**](https://scripturetoolbox.com/html/ic/index.html)  
+    * [**Joseph Smith's Inspired Version (IV/JST) Inline Viewer**](https://scripturetoolbox.com/html/ic/index.html)  
         An inline difference viewer for the KJV Bible and Joseph Smith's Inspired Version, letting you see the edits.
     * [**ZionBound (RLDS Study App)**](https://study.zionbound.com/)  
         An RLDS scripture search and study web app.
