@@ -704,7 +704,7 @@ with tab3:
           An archive of many scanned RLDS church history documents and periodicals.
       </li>
       <li><a href="https://www.centerplace.org/" target="_blank" rel="noopener noreferrer">
-          <strong>CenterPlace</strong>
+          <strong>CenterPlace.org</strong>
           </a><br>
           A large library of resources. The search bar at the top is very useful for finding materials.
       </li>
@@ -733,7 +733,7 @@ with tab3:
       <li><a href="https://www.southcrysler.org/" target="_blank" rel="noopener noreferrer">
           <strong>South Crysler Restoration Branch</strong>
           </a><br>
-          A local restoration branch that livestreams services. Check out the "for-lds-friends" and "sermons" pages.
+          A local restoration branch that livestreams services. Check out the "For LDS Friends" and "Sermons" pages.
       </li>
       <li><a href="https://www.youtube.com/@AcrosstheRestoration1830" target="_blank" rel="noopener noreferrer">
           <strong>Across the Restoration (YouTube)</strong>
