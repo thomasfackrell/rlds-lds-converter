@@ -6,6 +6,8 @@ hideTopBar = false
 
 [server]
 port = 8501
+enableWebsocketCopmression = false
+enableCORS = false
 
 
 [theme]
