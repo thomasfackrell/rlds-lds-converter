@@ -674,38 +674,71 @@ with tab2:
                             
                             st.markdown(f"**{verse['verse_number']}** {verse['text'].replace('\\n', '<br>')}", unsafe_allow_html=True)
 
-
 with tab3:
     st.header("More Study Resources")
 
+    # Use st.html() to bypass the Markdown parser
+    
     st.subheader("Scripture Study Tools")
-    st.markdown("""
-    * [**Joseph Smith's Inspired Version (IV/JST) Inline Viewer**](https://scripturetoolbox.com/html/ic/index.html)  
-        An inline difference viewer for the KJV Bible and Joseph Smith's Inspired Version, letting you see the edits.
-    * [**ZionBound (RLDS Study App)**](https://study.zionbound.com/)  
-        An RLDS scripture search and study web app.
+    st.html("""
+    <ul>
+      <li><a href="https://scripturetoolbox.com/html/ic/index.html" target="_blank" rel="noopener noreferrer">
+          <strong>Joseph Smith's Inspired Version (IV/JST) Inline Viewer</strong>
+          </a><br>
+          An inline difference viewer for the KJV Bible and Joseph Smith's Inspired Version, letting you see the edits.
+      </li>
+      <li><a href="https://study.zionbound.com/" target="_blank" rel="noopener noreferrer">
+          <strong>ZionBound (RLDS Study App)</strong>
+          </a><br>
+          An RLDS scripture search and study web app.
+      </li>
+    </ul>
     """)
 
     st.subheader("Historical Documents & Resources")
-    st.markdown("""
-    * [**Latter Day Truth**](https://latterdaytruth.org/)  
-        An archive of many scanned RLDS church history documents and periodicals.
-    * [**CenterPlace**](https://www.centerplace.org/)  
-        A large library of resources. The search bar at the top is very useful for finding materials.
+    st.html("""
+    <ul>
+      <li><a href="https://latterdaytruth.org/" target="_blank" rel="noopener noreferrer">
+          <strong>Latter Day Truth</strong>
+          </a><br>
+          An archive of many scanned RLDS church history documents and periodicals.
+      </li>
+      <li><a href="https://www.centerplace.org/" target="_blank" rel="noopener noreferrer">
+          <strong>CenterPlace</strong>
+          </a><br>
+          A large library of resources. The search bar at the top is very useful for finding materials.
+      </li>
+    </ul>
     """)
 
     st.subheader("Literature & Scriptures")
-    st.markdown("""
-    * [**Restoration Bookstore**](https://restorationbookstore.org/)  
-        A marketplace for traditional RLDS literature and scriptures.
-    * [**Restoration Scriptures Blog**](https://restorationscriptures.blogspot.com/)  
-        Where you can purchase a 3-in-1 fully bound traditional RLDS scripture set.
+    st.html("""
+    <ul>
+      <li><a href="https://restorationbookstore.org/" target="_blank" rel="noopener noreferrer">
+          <strong>Restoration Bookstore</strong>
+          </a><br>
+          A marketplace for traditional RLDS literature and scriptures.
+      </li>
+      <li><a href="https://restorationscriptures.blogspot.com/" target="_blank" "rel="noopener noreferrer">
+          <strong>Restoration Scriptures Blog</strong>
+          </a><br>
+          Where you can purchase a 3-in-1 fully bound traditional RLDS scripture set.
+      </li>
+    </ul>
     """)
 
     st.subheader("Community & Media")
-    st.markdown("""
-    * [**South Crysler Restoration Branch**](https://www.southcrysler.org/)  
-        A local restoration branch that livestreams services. Check out the "for-lds-friends" and "sermons" pages.
-    * [**Across the Restoration (YouTube)**](https://www.youtube.com/@AcrosstheRestoration1830)  
-        An up-and-coming channel for learning more about RLDS and Restoration Branches.
+    st.html("""
+    <ul>
+      <li><a href="https://www.southcrysler.org/" target="_blank" rel="noopener noreferrer">
+          <strong>South Crysler Restoration Branch</strong>
+          </a><br>
+          A local restoration branch that livestreams services. Check out the "for-lds-friends" and "sermons" pages.
+      </li>
+      <li><a href="https://www.youtube.com/@AcrosstheRestoration1830" target="_blank" rel="noopener noreferrer">
+          <strong>Across the Restoration (YouTube)</strong>
+          </a><br>
+          An up-and-coming channel for learning more about RLDS and Restoration Branches.
+      </li>
+    </ul>
     """)
