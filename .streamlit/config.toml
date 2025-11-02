@@ -3,12 +3,10 @@
 # This removes the hamburger menu and footer
 [ui]
 hideTopBar = false
-hideBottomBar = true
 
+[server]
+port = 8501
 
-[browser]
-# This sets the app to wide mode by default
-layout = "wide"
 
 [theme]
 # A clean, custom "book" theme
