@@ -383,9 +383,9 @@ st.write("Convert scripture references between LDS and RLDS (Restorationist) can
 
 # --- Initialize session state for the converter ---
 if 'source' not in st.session_state:
-    st.session_state.source = 'LDS'
+    st.session_state.source = 'RLDS'
 if 'target' not in st.session_state:
-    st.session_state.target = 'RLDS'
+    st.session_state.target = 'LDS'
 
 # --- Global Setup (DB Connection and Corpus IDs) ---
 if not os.path.exists(DB_FILE):
